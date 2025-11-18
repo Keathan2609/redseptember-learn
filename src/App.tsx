@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Courses from "./pages/Courses";
+import CourseDetail from "./pages/CourseDetail";
 import Resources from "./pages/Resources";
 import CalendarPage from "./pages/CalendarPage";
 import Forum from "./pages/Forum";
@@ -22,13 +23,14 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/courses" element={<Courses />} />
-          <Route path="/resources" element={<Resources />} />
-          <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/forum" element={<Forum />} />
-          <Route path="*" element={<NotFound />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/courses" element={<Courses />} />
+        <Route path="/courses/:id" element={<CourseDetail />} />
+        <Route path="/resources" element={<Resources />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/forum" element={<Forum />} />
+        <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
