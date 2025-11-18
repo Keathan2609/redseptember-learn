@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen } from "lucide-react";
+import { CourseDialog } from "@/components/courses/CourseDialog";
 
 const Courses = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
 
@@ -39,6 +42,36 @@ const Courses = () => {
     fetchData();
   }, []);
 
+  const handleCourseCreated = () => {
+    // Refresh courses list
+    const fetchData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        setProfile(profileData);
+
+        if (profileData?.role === "student") {
+          const { data } = await supabase
+            .from("enrollments")
+            .select("*, courses(*)")
+            .eq("student_id", user.id);
+          setCourses(data?.map((e) => e.courses) || []);
+        } else if (profileData?.role === "facilitator") {
+          const { data } = await supabase
+            .from("courses")
+            .select("*")
+            .eq("facilitator_id", user.id);
+          setCourses(data || []);
+        }
+      }
+    };
+    fetchData();
+  };
+
   return (
     <DashboardLayout>
       <div className="p-8">
@@ -50,10 +83,7 @@ const Courses = () => {
             </p>
           </div>
           {profile?.role === "facilitator" && (
-            <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Course
-            </Button>
+            <CourseDialog onCourseCreated={handleCourseCreated} />
           )}
         </div>
 
@@ -81,7 +111,11 @@ const Courses = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="outline" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => navigate(`/courses/${course.id}`)}
+                  >
                     View Course
                   </Button>
                 </CardContent>
