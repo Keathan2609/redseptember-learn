@@ -5,7 +5,54 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { BookOpen, Users, FileText, ClipboardCheck } from "lucide-react";
+import { BookOpen, Users, FileText, ClipboardCheck, GripVertical } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ModuleDialog } from "@/components/courses/ModuleDialog";
+import { AssessmentDialog } from "@/components/courses/AssessmentDialog";
+import { SubmissionReview } from "@/components/courses/SubmissionReview";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableModule({ module, onAssessmentCreated }: any) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: module.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3 flex-1">
+              <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+                <GripVertical className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <CardTitle>{module.title}</CardTitle>
+                <CardDescription>{module.description}</CardDescription>
+              </div>
+            </div>
+            <AssessmentDialog moduleId={module.id} onAssessmentCreated={onAssessmentCreated} />
+          </div>
+        </CardHeader>
+      </Card>
+    </div>
+  );
+}
 
 export default function CourseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -15,10 +62,36 @@ export default function CourseDetail() {
   const [students, setStudents] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   useEffect(() => {
     const fetchCourseData = async () => {
       if (!id) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        setProfile(profileData);
+
+        const { data: enrollmentData } = await supabase
+          .from("enrollments")
+          .select("*")
+          .eq("student_id", user.id)
+          .eq("course_id", id)
+          .maybeSingle();
+        setIsEnrolled(!!enrollmentData);
+      }
 
       const { data: courseData } = await supabase
         .from("courses")
@@ -66,6 +139,69 @@ export default function CourseDetail() {
     fetchCourseData();
   }, [id]);
 
+  const handleEnroll = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("enrollments")
+        .insert([{ student_id: user.id, course_id: id }]);
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: "Enrolled successfully" });
+      setIsEnrolled(true);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleDragEnd = async (event: any) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = modules.findIndex((m) => m.id === active.id);
+    const newIndex = modules.findIndex((m) => m.id === over.id);
+
+    const newModules = arrayMove(modules, oldIndex, newIndex);
+    setModules(newModules);
+
+    try {
+      const updates = newModules.map((module, index) => 
+        supabase.from("modules").update({ order_index: index }).eq("id", module.id)
+      );
+      await Promise.all(updates);
+    } catch (error: any) {
+      toast({ title: "Error", description: "Failed to reorder modules", variant: "destructive" });
+    }
+  };
+
+  const refetchData = async () => {
+    if (!id) return;
+    
+    const { data: modulesData } = await supabase
+      .from("modules")
+      .select("*")
+      .eq("course_id", id)
+      .order("order_index");
+    setModules(modulesData || []);
+
+    const { data: modulesForAssessments } = await supabase
+      .from("modules")
+      .select("id")
+      .eq("course_id", id);
+    
+    if (modulesForAssessments && modulesForAssessments.length > 0) {
+      const moduleIds = modulesForAssessments.map((m) => m.id);
+      const { data: assessmentsData } = await supabase
+        .from("assessments")
+        .select("*")
+        .in("module_id", moduleIds);
+      setAssessments(assessmentsData || []);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -95,8 +231,15 @@ export default function CourseDetail() {
               <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
             </div>
           )}
-          <h1 className="text-4xl font-bold mb-2">{course.title}</h1>
-          <p className="text-muted-foreground">{course.description}</p>
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">{course.title}</h1>
+              <p className="text-muted-foreground">{course.description}</p>
+            </div>
+            {profile?.role === "student" && !isEnrolled && (
+              <Button onClick={handleEnroll}>Enroll in Course</Button>
+            )}
+          </div>
         </div>
 
         <Tabs defaultValue="modules" className="space-y-6">
@@ -120,21 +263,36 @@ export default function CourseDetail() {
           </TabsList>
 
           <TabsContent value="modules" className="space-y-4">
+            {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
+              <div className="flex justify-end mb-4">
+                <ModuleDialog 
+                  courseId={id!} 
+                  onModuleCreated={refetchData}
+                  existingModulesCount={modules.length}
+                />
+              </div>
+            )}
+            
             {modules.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No modules yet. Create your first module to get started.
+                  No modules yet. Modules will organize your course content into structured sections.
                 </CardContent>
               </Card>
             ) : (
-              modules.map((module) => (
-                <Card key={module.id} className="border-border bg-card hover:shadow-glow transition-smooth">
-                  <CardHeader>
-                    <CardTitle>{module.title}</CardTitle>
-                    <CardDescription>{module.description}</CardDescription>
-                  </CardHeader>
-                </Card>
-              ))
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={modules.map(m => m.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-4">
+                    {modules.map((module) => (
+                      <SortableModule 
+                        key={module.id} 
+                        module={module}
+                        onAssessmentCreated={refetchData}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
           </TabsContent>
 
@@ -142,24 +300,36 @@ export default function CourseDetail() {
             {assessments.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No assessments yet. Add assessments to evaluate student progress.
+                  No assessments yet. Assessments help track student progress.
                 </CardContent>
               </Card>
             ) : (
               assessments.map((assessment) => (
-                <Card key={assessment.id} className="border-border bg-card">
+                <Card key={assessment.id}>
                   <CardHeader>
-                    <CardTitle>{assessment.title}</CardTitle>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>{assessment.title}</span>
+                      <span className="text-sm font-normal text-muted-foreground capitalize">
+                        {assessment.assessment_type}
+                      </span>
+                    </CardTitle>
                     <CardDescription>{assessment.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between text-sm">
-                      <span>Total Points: {assessment.total_points}</span>
+                    <div className="text-sm text-muted-foreground mt-2">
                       {assessment.due_date && (
-                        <span>Due: {new Date(assessment.due_date).toLocaleDateString()}</span>
+                        <div>Due: {new Date(assessment.due_date).toLocaleDateString()}</div>
                       )}
+                      <div>Total Points: {assessment.total_points}</div>
                     </div>
-                  </CardContent>
+                  </CardHeader>
+                  {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
+                    <CardContent>
+                      <SubmissionReview 
+                        assessmentId={assessment.id}
+                        totalPoints={assessment.total_points}
+                        questions={assessment.questions as any}
+                      />
+                    </CardContent>
+                  )}
                 </Card>
               ))
             )}
