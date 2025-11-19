@@ -16,29 +16,35 @@ export type Database = {
     Tables: {
       assessments: {
         Row: {
+          assessment_type: string | null
           created_at: string | null
           description: string | null
           due_date: string | null
           id: string
           module_id: string | null
+          questions: Json | null
           title: string
           total_points: number | null
         }
         Insert: {
+          assessment_type?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
           module_id?: string | null
+          questions?: Json | null
           title: string
           total_points?: number | null
         }
         Update: {
+          assessment_type?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
           module_id?: string | null
+          questions?: Json | null
           title?: string
           total_points?: number | null
         }
@@ -376,7 +382,9 @@ export type Database = {
       }
       submissions: {
         Row: {
+          answers: Json | null
           assessment_id: string | null
+          auto_grade: number | null
           feedback: string | null
           file_url: string | null
           grade: number | null
@@ -386,7 +394,9 @@ export type Database = {
           submitted_at: string | null
         }
         Insert: {
+          answers?: Json | null
           assessment_id?: string | null
+          auto_grade?: number | null
           feedback?: string | null
           file_url?: string | null
           grade?: number | null
@@ -396,7 +406,9 @@ export type Database = {
           submitted_at?: string | null
         }
         Update: {
+          answers?: Json | null
           assessment_id?: string | null
+          auto_grade?: number | null
           feedback?: string | null
           file_url?: string | null
           grade?: number | null
