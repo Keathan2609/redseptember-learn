@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, XCircle, Upload } from "lucide-react";
 
 interface Question {
   id: string;
@@ -22,6 +23,7 @@ interface AssessmentTakingProps {
     id: string;
     title: string;
     description: string;
+    assessment_type: string;
     questions: Question[];
     total_points: number;
     due_date: string;
@@ -33,7 +35,11 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
+
+  const isAssignment = assessment.assessment_type === "assignment";
 
   const handleAnswerChange = (questionId: string, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
@@ -67,6 +73,42 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
     return totalPoints;
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please upload a file smaller than 20MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadedFile(file);
+  };
+
+  const uploadFileToStorage = async (file: File): Promise<string> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${assessment.id}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('course-resources')
+      .upload(fileName, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('course-resources')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
+
   const handleSubmit = async () => {
     if (!validateAnswers()) {
       toast({
@@ -77,10 +119,25 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
       return;
     }
 
+    if (isAssignment && !uploadedFile) {
+      toast({
+        title: "File Required",
+        description: "Please upload your assignment file before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
+    setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
+
+      let fileUrl = null;
+      if (uploadedFile) {
+        fileUrl = await uploadFileToStorage(uploadedFile);
+      }
 
       const autoGrade = calculateAutoGrade();
 
@@ -89,13 +146,16 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
         student_id: user.id,
         answers,
         auto_grade: autoGrade,
+        file_url: fileUrl,
       });
 
       if (error) throw error;
 
       toast({
         title: "Assessment Submitted",
-        description: `Your answers have been submitted successfully. Auto-grade: ${autoGrade}/${assessment.total_points}`,
+        description: isAssignment 
+          ? "Your assignment has been submitted successfully"
+          : `Your answers have been submitted successfully. Auto-grade: ${autoGrade}/${assessment.total_points}`,
       });
 
       onSubmit();
@@ -107,6 +167,7 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
       });
     } finally {
       setIsSubmitting(false);
+      setUploading(false);
     }
   };
 
@@ -171,13 +232,43 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
         </Card>
       ))}
 
+      {isAssignment && (
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Upload Assignment File
+            </CardTitle>
+            <CardDescription>
+              Upload your completed assignment (PDF, DOCX, ZIP, etc. - Max 20MB)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Input
+                type="file"
+                onChange={handleFileUpload}
+                accept=".pdf,.doc,.docx,.zip,.rar,.txt,.ppt,.pptx"
+                disabled={uploading}
+              />
+              {uploadedFile && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  {uploadedFile.name} ({(uploadedFile.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex justify-end gap-4">
         <Button
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || uploading}
           size="lg"
         >
-          {isSubmitting ? "Submitting..." : "Submit Assessment"}
+          {uploading ? "Uploading..." : isSubmitting ? "Submitting..." : "Submit Assessment"}
         </Button>
       </div>
     </div>
