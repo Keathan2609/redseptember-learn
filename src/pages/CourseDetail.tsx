@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { ModuleDialog } from "@/components/courses/ModuleDialog";
 import { AssessmentDialog } from "@/components/courses/AssessmentDialog";
 import { SubmissionReview } from "@/components/courses/SubmissionReview";
+import ResourceUpload from "@/components/courses/ResourceUpload";
+import AssessmentTaking from "@/components/courses/AssessmentTaking";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 import {
   DndContext,
   closestCenter,
@@ -64,6 +67,8 @@ export default function CourseDetail() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [selectedAssessment, setSelectedAssessment] = useState<string | null>(null);
+  const [takingAssessment, setTakingAssessment] = useState<any | null>(null);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -200,6 +205,13 @@ export default function CourseDetail() {
         .in("module_id", moduleIds);
       setAssessments(assessmentsData || []);
     }
+
+    const { data: resourceData } = await supabase
+      .from("resources")
+      .select("*")
+      .eq("course_id", id)
+      .order("created_at", { ascending: false });
+    setResources(resourceData || []);
   };
 
   if (loading) {
@@ -252,13 +264,15 @@ export default function CourseDetail() {
               <ClipboardCheck className="h-4 w-4 mr-2" />
               Assessments
             </TabsTrigger>
-            <TabsTrigger value="students">
-              <Users className="h-4 w-4 mr-2" />
-              Students
-            </TabsTrigger>
-            <TabsTrigger value="materials">
+            {profile?.role === "facilitator" && (
+              <TabsTrigger value="students">
+                <Users className="h-4 w-4 mr-2" />
+                Students
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="resources">
               <FileText className="h-4 w-4 mr-2" />
-              Materials
+              Resources
             </TabsTrigger>
           </TabsList>
 
@@ -297,7 +311,24 @@ export default function CourseDetail() {
           </TabsContent>
 
           <TabsContent value="assessments" className="space-y-4">
-            {assessments.length === 0 ? (
+            {takingAssessment ? (
+              <div>
+                <Button
+                  variant="outline"
+                  className="mb-4"
+                  onClick={() => setTakingAssessment(null)}
+                >
+                  ← Back to Assessments
+                </Button>
+                <AssessmentTaking
+                  assessment={takingAssessment}
+                  onSubmit={() => {
+                    setTakingAssessment(null);
+                    refetchData();
+                  }}
+                />
+              </div>
+            ) : assessments.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
                   No assessments yet. Assessments help track student progress.
@@ -307,13 +338,15 @@ export default function CourseDetail() {
               assessments.map((assessment) => (
                 <Card key={assessment.id}>
                   <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span>{assessment.title}</span>
-                      <span className="text-sm font-normal text-muted-foreground capitalize">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>{assessment.title}</CardTitle>
+                        <CardDescription>{assessment.description}</CardDescription>
+                      </div>
+                      <Badge variant="outline" className="capitalize">
                         {assessment.assessment_type}
-                      </span>
-                    </CardTitle>
-                    <CardDescription>{assessment.description}</CardDescription>
+                      </Badge>
+                    </div>
                     <div className="text-sm text-muted-foreground mt-2">
                       {assessment.due_date && (
                         <div>Due: {new Date(assessment.due_date).toLocaleDateString()}</div>
@@ -321,15 +354,20 @@ export default function CourseDetail() {
                       <div>Total Points: {assessment.total_points}</div>
                     </div>
                   </CardHeader>
-                  {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
-                    <CardContent>
+                  <CardContent>
+                    {profile?.role === "student" && isEnrolled && (
+                      <Button onClick={() => setTakingAssessment(assessment)}>
+                        Take Assessment
+                      </Button>
+                    )}
+                    {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
                       <SubmissionReview 
                         assessmentId={assessment.id}
                         totalPoints={assessment.total_points}
                         questions={assessment.questions as any}
                       />
-                    </CardContent>
-                  )}
+                    )}
+                  </CardContent>
                 </Card>
               ))
             )}
@@ -363,29 +401,43 @@ export default function CourseDetail() {
             )}
           </TabsContent>
 
-          <TabsContent value="materials" className="space-y-4">
+          <TabsContent value="resources" className="space-y-4">
+            {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
+              <div className="flex justify-end mb-4">
+                <ResourceUpload courseId={id!} onResourceAdded={refetchData} />
+              </div>
+            )}
             {resources.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No course materials yet. Upload resources for your students.
+                  No course materials yet. {profile?.role === "facilitator" ? "Upload resources for your students." : "Resources will appear here once added."}
                 </CardContent>
               </Card>
             ) : (
               resources.map((resource) => (
                 <Card key={resource.id} className="border-border bg-card">
                   <CardHeader>
-                    <CardTitle>{resource.title}</CardTitle>
-                    <CardDescription>{resource.description}</CardDescription>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <CardTitle>{resource.title}</CardTitle>
+                        {resource.description && (
+                          <CardDescription>{resource.description}</CardDescription>
+                        )}
+                      </div>
+                      <Badge variant="outline">
+                        {resource.file_type?.split("/")[1] || "file"}
+                      </Badge>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <a
-                      href={resource.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(resource.file_url, "_blank")}
                     >
-                      View Resource
-                    </a>
+                      <FileText className="mr-2 h-4 w-4" />
+                      View/Download
+                    </Button>
                   </CardContent>
                 </Card>
               ))
