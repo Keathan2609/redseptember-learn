@@ -12,6 +12,7 @@ import Resources from "./pages/Resources";
 import CalendarPage from "./pages/CalendarPage";
 import Forum from "./pages/Forum";
 import Analytics from "./pages/Analytics";
+import StudentProgress from "./pages/StudentProgress";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/forum" element={<Forum />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/student-progress" element={<StudentProgress />} />
         <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
