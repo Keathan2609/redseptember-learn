@@ -270,6 +270,12 @@ export default function CourseDetail() {
                 Students
               </TabsTrigger>
             )}
+            {profile?.role === "facilitator" && (
+              <TabsTrigger value="submissions">
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Submissions
+              </TabsTrigger>
+            )}
             <TabsTrigger value="resources">
               <FileText className="h-4 w-4 mr-2" />
               Resources
@@ -399,6 +405,34 @@ export default function CourseDetail() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="submissions" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Student Submissions</CardTitle>
+                <CardDescription>Review and grade student work</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {assessments.map((assessment) => (
+                    <div key={assessment.id}>
+                      <h3 className="font-semibold mb-4 text-lg">{assessment.title}</h3>
+                      <SubmissionReview
+                        assessmentId={assessment.id}
+                        totalPoints={assessment.total_points || 100}
+                        questions={assessment.questions as any}
+                      />
+                    </div>
+                  ))}
+                  {assessments.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">
+                      No assessments available yet
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="resources" className="space-y-4">

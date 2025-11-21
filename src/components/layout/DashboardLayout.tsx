@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import {
   Sidebar,
   SidebarContent,
@@ -84,14 +85,17 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <div className="min-h-screen flex w-full bg-background">
         <Sidebar className="border-r border-sidebar-border">
           <SidebarHeader className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-primary rounded-lg shadow-glow">
-                <GraduationCap className="h-6 w-6 text-primary-foreground" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-primary rounded-lg shadow-glow">
+                  <GraduationCap className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">RedSeptember</h2>
+                  <p className="text-xs text-muted-foreground">Learning Platform</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-foreground">RedSeptember</h2>
-                <p className="text-xs text-muted-foreground">Learning Platform</p>
-              </div>
+              <NotificationBell />
             </div>
           </SidebarHeader>
           <SidebarContent>
