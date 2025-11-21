@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  Users,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -90,7 +91,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { icon: FileText, label: "Resources", path: "/resources" },
     { icon: Calendar, label: "Calendar", path: "/calendar" },
     { icon: MessageSquare, label: "Discussion", path: "/forum" },
-    ...(userRole === "facilitator" ? [{ icon: BarChart3, label: "Analytics", path: "/analytics" }] : []),
+    ...(userRole === "facilitator" ? [
+      { icon: BarChart3, label: "Analytics", path: "/analytics" },
+      { icon: Users, label: "Student Progress", path: "/student-progress" }
+    ] : []),
   ];
 
   return (
