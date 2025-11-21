@@ -16,6 +16,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import {
+  BarChart3,
   BookOpen,
   Calendar,
   FileText,
@@ -34,6 +35,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -41,9 +43,19 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       setUser(session?.user ?? null);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+        setUserRole(profile?.role || null);
+      }
+      
       setLoading(false);
     });
 
@@ -78,6 +90,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { icon: FileText, label: "Resources", path: "/resources" },
     { icon: Calendar, label: "Calendar", path: "/calendar" },
     { icon: MessageSquare, label: "Discussion", path: "/forum" },
+    ...(userRole === "facilitator" ? [{ icon: BarChart3, label: "Analytics", path: "/analytics" }] : []),
   ];
 
   return (
