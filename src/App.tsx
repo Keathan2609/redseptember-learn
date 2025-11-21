@@ -11,6 +11,7 @@ import CourseDetail from "./pages/CourseDetail";
 import Resources from "./pages/Resources";
 import CalendarPage from "./pages/CalendarPage";
 import Forum from "./pages/Forum";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,7 +23,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+        <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/courses" element={<Courses />} />
@@ -30,6 +31,7 @@ const App = () => (
         <Route path="/resources" element={<Resources />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/forum" element={<Forum />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
