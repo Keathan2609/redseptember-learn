@@ -7,10 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface Student {
   id: string;
@@ -51,11 +58,35 @@ interface StudentDetail {
   }>;
 }
 
+interface ClassAverages {
+  averageGrade: number;
+  averageCompletion: number;
+  averageSubmissions: number;
+  averageForumPosts: number;
+}
+
+interface ExportOptions {
+  startDate: string;
+  endDate: string;
+  includeGrades: boolean;
+  includeProgress: boolean;
+  includeForumActivity: boolean;
+}
+
 const StudentProgress = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [classAverages, setClassAverages] = useState<ClassAverages | null>(null);
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    includeGrades: true,
+    includeProgress: true,
+    includeForumActivity: true,
+  });
 
   useEffect(() => {
     checkFacilitatorAccess();
@@ -194,6 +225,30 @@ const StudentProgress = () => {
     }));
 
     setStudents(studentsArray);
+    
+    // Calculate class averages
+    if (studentsArray.length > 0) {
+      const avgGrade = Math.round(
+        studentsArray.reduce((sum, s) => sum + s.averageGrade, 0) / studentsArray.length
+      );
+      const avgCompletion = Math.round(
+        studentsArray.reduce((sum, s) => sum + s.completionRate, 0) / studentsArray.length
+      );
+      const avgSubmissions = Math.round(
+        studentsArray.reduce((sum, s) => sum + (students.find(st => st.id === s.id) as any)?.submissions?.length || 0, 0) / studentsArray.length
+      );
+      const avgForumPosts = Math.round(
+        studentsArray.reduce((sum, s) => sum + s.forumPosts, 0) / studentsArray.length
+      );
+      
+      setClassAverages({
+        averageGrade: avgGrade,
+        averageCompletion: avgCompletion,
+        averageSubmissions: avgSubmissions,
+        averageForumPosts: avgForumPosts,
+      });
+    }
+    
     setLoading(false);
   };
 
@@ -330,6 +385,147 @@ const StudentProgress = () => {
     });
   };
 
+  const exportToPDF = () => {
+    if (!selectedStudent) return;
+
+    const doc = new jsPDF();
+    const { profile, submissions, enrollments, forumActivity } = selectedStudent;
+    
+    // Filter data by date range
+    const filteredSubmissions = submissions.filter(s => {
+      const date = new Date(s.submitted_at);
+      return date >= new Date(exportOptions.startDate) && date <= new Date(exportOptions.endDate);
+    });
+
+    // Title
+    doc.setFontSize(20);
+    doc.text("Student Progress Report", 14, 20);
+    
+    // Student Info
+    doc.setFontSize(12);
+    doc.text(`Name: ${profile.full_name}`, 14, 35);
+    doc.text(`Email: ${profile.email}`, 14, 42);
+    doc.text(`Report Period: ${exportOptions.startDate} to ${exportOptions.endDate}`, 14, 49);
+    
+    let yPosition = 60;
+
+    // Grades Section
+    if (exportOptions.includeGrades && filteredSubmissions.length > 0) {
+      doc.setFontSize(14);
+      doc.text("Grades", 14, yPosition);
+      yPosition += 7;
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Assessment', 'Course', 'Grade', 'Date']],
+        body: filteredSubmissions.map(s => [
+          s.assessment_title,
+          s.course_title,
+          s.grade !== null ? s.grade.toString() : 'Pending',
+          new Date(s.submitted_at).toLocaleDateString()
+        ]),
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Progress Section
+    if (exportOptions.includeProgress) {
+      doc.setFontSize(14);
+      doc.text("Course Progress", 14, yPosition);
+      yPosition += 7;
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Course', 'Progress', 'Enrolled']],
+        body: enrollments.map(e => [
+          e.course_title,
+          `${e.progress}%`,
+          new Date(e.enrolled_at).toLocaleDateString()
+        ]),
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Forum Activity Section
+    if (exportOptions.includeForumActivity && forumActivity.length > 0) {
+      const filteredActivity = forumActivity.filter(a => {
+        const date = new Date(a.created_at);
+        return date >= new Date(exportOptions.startDate) && date <= new Date(exportOptions.endDate);
+      });
+
+      if (filteredActivity.length > 0) {
+        doc.setFontSize(14);
+        doc.text("Forum Activity", 14, yPosition);
+        yPosition += 7;
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Type', 'Course', 'Date', 'Content']],
+          body: filteredActivity.slice(0, 10).map(a => [
+            a.type,
+            a.course_title,
+            new Date(a.created_at).toLocaleDateString(),
+            a.content.substring(0, 50) + '...'
+          ]),
+        });
+      }
+    }
+
+    doc.save(`${profile.full_name}_progress_report.pdf`);
+    toast({
+      title: "Report Downloaded",
+      description: "PDF report has been downloaded successfully.",
+    });
+  };
+
+  const exportToCSV = () => {
+    if (!selectedStudent) return;
+
+    const { profile, submissions, enrollments } = selectedStudent;
+    
+    // Filter data by date range
+    const filteredSubmissions = submissions.filter(s => {
+      const date = new Date(s.submitted_at);
+      return date >= new Date(exportOptions.startDate) && date <= new Date(exportOptions.endDate);
+    });
+
+    let csvContent = "Student Progress Report\n\n";
+    csvContent += `Name,${profile.full_name}\n`;
+    csvContent += `Email,${profile.email}\n`;
+    csvContent += `Report Period,${exportOptions.startDate} to ${exportOptions.endDate}\n\n`;
+
+    if (exportOptions.includeGrades && filteredSubmissions.length > 0) {
+      csvContent += "Grades\n";
+      csvContent += "Assessment,Course,Grade,Submitted Date\n";
+      filteredSubmissions.forEach(s => {
+        csvContent += `"${s.assessment_title}","${s.course_title}",${s.grade !== null ? s.grade : 'Pending'},${new Date(s.submitted_at).toLocaleDateString()}\n`;
+      });
+      csvContent += "\n";
+    }
+
+    if (exportOptions.includeProgress) {
+      csvContent += "Course Progress\n";
+      csvContent += "Course,Progress,Enrolled Date\n";
+      enrollments.forEach(e => {
+        csvContent += `"${e.course_title}",${e.progress}%,${new Date(e.enrolled_at).toLocaleDateString()}\n`;
+      });
+      csvContent += "\n";
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${profile.full_name}_progress_report.csv`;
+    link.click();
+    
+    toast({
+      title: "Report Downloaded",
+      description: "CSV report has been downloaded successfully.",
+    });
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -344,14 +540,105 @@ const StudentProgress = () => {
     return (
       <DashboardLayout>
         <div className="p-8">
-          <Button
-            variant="ghost"
-            onClick={() => setSelectedStudent(null)}
-            className="mb-6"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Students
-          </Button>
+          <div className="flex items-center justify-between mb-6">
+            <Button
+              variant="ghost"
+              onClick={() => setSelectedStudent(null)}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Students
+            </Button>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Report
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Export Progress Report</DialogTitle>
+                  <DialogDescription>
+                    Customize and download student progress report
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={exportOptions.startDate}
+                        onChange={(e) => setExportOptions({ ...exportOptions, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="endDate">End Date</Label>
+                      <Input
+                        id="endDate"
+                        type="date"
+                        value={exportOptions.endDate}
+                        onChange={(e) => setExportOptions({ ...exportOptions, endDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>Include in Report</Label>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="grades"
+                        checked={exportOptions.includeGrades}
+                        onCheckedChange={(checked) => 
+                          setExportOptions({ ...exportOptions, includeGrades: checked as boolean })
+                        }
+                      />
+                      <label htmlFor="grades" className="text-sm cursor-pointer">
+                        Grades and Submissions
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="progress"
+                        checked={exportOptions.includeProgress}
+                        onCheckedChange={(checked) => 
+                          setExportOptions({ ...exportOptions, includeProgress: checked as boolean })
+                        }
+                      />
+                      <label htmlFor="progress" className="text-sm cursor-pointer">
+                        Course Progress
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="forum"
+                        checked={exportOptions.includeForumActivity}
+                        onCheckedChange={(checked) => 
+                          setExportOptions({ ...exportOptions, includeForumActivity: checked as boolean })
+                        }
+                      />
+                      <label htmlFor="forum" className="text-sm cursor-pointer">
+                        Forum Activity
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={exportToPDF} className="flex-1">
+                      <FileText className="mr-2 h-4 w-4" />
+                      Export as PDF
+                    </Button>
+                    <Button onClick={exportToCSV} variant="outline" className="flex-1">
+                      <FileSpreadsheet className="mr-2 h-4 w-4" />
+                      Export as CSV
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
 
           {/* Student Header */}
           <Card className="mb-6">
@@ -388,6 +675,7 @@ const StudentProgress = () => {
           <Tabs defaultValue="overview" className="space-y-6">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="comparison">Comparison</TabsTrigger>
               <TabsTrigger value="submissions">Submissions</TabsTrigger>
               <TabsTrigger value="activity">Forum Activity</TabsTrigger>
             </TabsList>
@@ -497,6 +785,204 @@ const StudentProgress = () => {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="comparison" className="space-y-4">
+              {classAverages && (
+                <>
+                  {/* Performance Comparison Chart */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Performance vs Class Average</CardTitle>
+                      <CardDescription>Compare student metrics with class benchmarks</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart
+                          data={[
+                            {
+                              metric: 'Avg Grade',
+                              Student: selectedStudent.profile.averageGrade,
+                              'Class Average': classAverages.averageGrade,
+                            },
+                            {
+                              metric: 'Completion',
+                              Student: selectedStudent.profile.completionRate,
+                              'Class Average': classAverages.averageCompletion,
+                            },
+                            {
+                              metric: 'Forum Posts',
+                              Student: selectedStudent.profile.forumPosts,
+                              'Class Average': classAverages.averageForumPosts,
+                            },
+                          ]}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="metric" stroke="hsl(var(--foreground))" />
+                          <YAxis stroke="hsl(var(--foreground))" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--card))',
+                              border: '1px solid hsl(var(--border))'
+                            }}
+                          />
+                          <Legend />
+                          <Bar dataKey="Student" fill="hsl(var(--primary))" />
+                          <Bar dataKey="Class Average" fill="hsl(var(--muted-foreground))" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Performance Indicators */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Grade Performance</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Student Grade</span>
+                            <Badge variant={selectedStudent.profile.averageGrade >= classAverages.averageGrade ? "default" : "secondary"}>
+                              {selectedStudent.profile.averageGrade}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Class Average</span>
+                            <Badge variant="outline">{classAverages.averageGrade}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedStudent.profile.averageGrade >= classAverages.averageGrade ? (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                                <span className="text-sm text-primary">
+                                  {selectedStudent.profile.averageGrade - classAverages.averageGrade} points above average
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-destructive rotate-180" />
+                                <span className="text-sm text-destructive">
+                                  {classAverages.averageGrade - selectedStudent.profile.averageGrade} points below average
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Completion Rate</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Student Progress</span>
+                            <Badge variant={selectedStudent.profile.completionRate >= classAverages.averageCompletion ? "default" : "secondary"}>
+                              {selectedStudent.profile.completionRate}%
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Class Average</span>
+                            <Badge variant="outline">{classAverages.averageCompletion}%</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedStudent.profile.completionRate >= classAverages.averageCompletion ? (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                                <span className="text-sm text-primary">
+                                  {selectedStudent.profile.completionRate - classAverages.averageCompletion}% above average
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-destructive rotate-180" />
+                                <span className="text-sm text-destructive">
+                                  {classAverages.averageCompletion - selectedStudent.profile.completionRate}% below average
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Forum Engagement</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Student Posts</span>
+                            <Badge variant={selectedStudent.profile.forumPosts >= classAverages.averageForumPosts ? "default" : "secondary"}>
+                              {selectedStudent.profile.forumPosts}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Class Average</span>
+                            <Badge variant="outline">{classAverages.averageForumPosts}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedStudent.profile.forumPosts >= classAverages.averageForumPosts ? (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                                <span className="text-sm text-primary">
+                                  {selectedStudent.profile.forumPosts - classAverages.averageForumPosts} posts above average
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-destructive rotate-180" />
+                                <span className="text-sm text-destructive">
+                                  {classAverages.averageForumPosts - selectedStudent.profile.forumPosts} posts below average
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Overall Standing</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {selectedStudent.profile.averageGrade >= classAverages.averageGrade &&
+                           selectedStudent.profile.completionRate >= classAverages.averageCompletion ? (
+                            <>
+                              <div className="text-2xl font-bold text-primary">Excellent</div>
+                              <p className="text-sm text-muted-foreground">
+                                Performing above average in multiple areas
+                              </p>
+                            </>
+                          ) : selectedStudent.profile.averageGrade < classAverages.averageGrade - 10 ||
+                                     selectedStudent.profile.completionRate < classAverages.averageCompletion - 20 ? (
+                            <>
+                              <div className="text-2xl font-bold text-destructive">Needs Attention</div>
+                              <p className="text-sm text-muted-foreground">
+                                Consider reaching out to provide additional support
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-2xl font-bold text-yellow-500">Average</div>
+                              <p className="text-sm text-muted-foreground">
+                                Meeting class expectations
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="submissions">

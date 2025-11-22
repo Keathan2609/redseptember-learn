@@ -1,1 +1,4 @@
 project_id = "umeulwdcsvmtrrgyyqqg"
+
+[functions.check-student-progress]
+verify_jwt = false
