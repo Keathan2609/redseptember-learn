@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Users, CheckCircle, MessageSquare, TrendingUp, Award, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { BulkActionsDialog } from "@/components/courses/BulkActionsDialog";
 
 interface Course {
   id: string;
@@ -40,6 +41,8 @@ const Analytics = () => {
   const [gradeDistribution, setGradeDistribution] = useState<any[]>([]);
   const [engagementTrend, setEngagementTrend] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
+  const [assessments, setAssessments] = useState<any[]>([]);
 
   useEffect(() => {
     checkFacilitatorAccess();
@@ -103,8 +106,20 @@ const Analytics = () => {
     // Fetch enrollments
     const { data: enrollments } = await supabase
       .from("enrollments")
-      .select("*")
+      .select(`
+        *,
+        profiles!enrollments_student_id_fkey(id, full_name, email)
+      `)
       .in("course_id", courseIds);
+
+    // Get unique students
+    const studentsMap = new Map();
+    enrollments?.forEach((enrollment: any) => {
+      if (enrollment.profiles && !studentsMap.has(enrollment.profiles.id)) {
+        studentsMap.set(enrollment.profiles.id, enrollment.profiles);
+      }
+    });
+    setEnrolledStudents(Array.from(studentsMap.values()));
 
     // Fetch modules and assessments
     const { data: modules } = await supabase
@@ -119,9 +134,10 @@ const Analytics = () => {
     if (moduleIds.length > 0) {
       const { data: assessmentsData } = await supabase
         .from("assessments")
-        .select("id, module_id, total_points")
+        .select("id, title, module_id, total_points")
         .in("module_id", moduleIds);
       assessments = assessmentsData || [];
+      setAssessments(assessments);
 
       const assessmentIds = assessments.map(a => a.id);
       if (assessmentIds.length > 0) {
@@ -323,6 +339,26 @@ const Analytics = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Bulk Actions Section */}
+        {enrolledStudents.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Bulk Actions</CardTitle>
+                  <CardDescription>Manage multiple students at once</CardDescription>
+                </div>
+                <BulkActionsDialog
+                  students={enrolledStudents}
+                  courseId={selectedCourse !== "all" ? selectedCourse : undefined}
+                  assessments={assessments.map(a => ({ id: a.id, title: a.title }))}
+                  onActionComplete={fetchAnalytics}
+                />
+              </div>
+            </CardHeader>
+          </Card>
+        )}
 
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList>
