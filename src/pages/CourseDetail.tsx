@@ -12,6 +12,7 @@ import { AssessmentDialog } from "@/components/courses/AssessmentDialog";
 import { SubmissionReview } from "@/components/courses/SubmissionReview";
 import ResourceUpload from "@/components/courses/ResourceUpload";
 import AssessmentTaking from "@/components/courses/AssessmentTaking";
+import { BulkActionsDialog } from "@/components/courses/BulkActionsDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -387,23 +388,33 @@ export default function CourseDetail() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {students.map((student: any) => (
-                  <Card key={student.id} className="border-border bg-card">
-                    <CardContent className="flex items-center gap-4 pt-6">
-                      <Avatar>
-                        <AvatarFallback>
-                          {student.full_name?.charAt(0) || student.email.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{student.full_name || "Unnamed Student"}</p>
-                        <p className="text-sm text-muted-foreground">{student.email}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <>
+                <div className="flex justify-end">
+                  <BulkActionsDialog
+                    students={students}
+                    courseId={id}
+                    assessments={assessments.map(a => ({ id: a.id, title: a.title }))}
+                    onActionComplete={refetchData}
+                  />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {students.map((student: any) => (
+                    <Card key={student.id} className="border-border bg-card">
+                      <CardContent className="flex items-center gap-4 pt-6">
+                        <Avatar>
+                          <AvatarFallback>
+                            {student.full_name?.charAt(0) || student.email.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{student.full_name || "Unnamed Student"}</p>
+                          <p className="text-sm text-muted-foreground">{student.email}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
             )}
           </TabsContent>
 
