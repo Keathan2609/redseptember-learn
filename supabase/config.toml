@@ -2,3 +2,6 @@ project_id = "umeulwdcsvmtrrgyyqqg"
 
 [functions.check-student-progress]
 verify_jwt = false
+
+[functions.send-bulk-email]
+verify_jwt = false

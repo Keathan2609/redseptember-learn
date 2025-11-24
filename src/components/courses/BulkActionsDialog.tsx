@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,8 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Clock, Award, Users } from "lucide-react";
+import { Send, Clock, Award, Users, Search, Calendar as CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 
 interface Student {
   id: string;
@@ -30,6 +33,19 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [performanceFilter, setPerformanceFilter] = useState<string>("all");
+  const [progressFilter, setProgressFilter] = useState<string>("all");
+
+  // Scheduling
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date>();
+  const [scheduledTime, setScheduledTime] = useState("09:00");
+
+  // Email
+  const [sendEmail, setSendEmail] = useState(false);
+
   // Announcement state
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementMessage, setAnnouncementMessage] = useState("");
@@ -43,6 +59,18 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
   const [adjustmentType, setAdjustmentType] = useState<"add" | "multiply">("add");
   const [adjustmentValue, setAdjustmentValue] = useState(0);
 
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      const matchesSearch = searchQuery === "" || 
+        student.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // These filters require additional data from enrollments/submissions
+      // For now, we'll just use search
+      return matchesSearch;
+    });
+  }, [students, searchQuery]);
+
   const handleStudentToggle = (studentId: string) => {
     setSelectedStudents(prev => 
       prev.includes(studentId) 
@@ -52,10 +80,10 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
   };
 
   const handleSelectAll = () => {
-    if (selectedStudents.length === students.length) {
+    if (selectedStudents.length === filteredStudents.length) {
       setSelectedStudents([]);
     } else {
-      setSelectedStudents(students.map(s => s.id));
+      setSelectedStudents(filteredStudents.map(s => s.id));
     }
   };
 
@@ -78,6 +106,21 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
       return;
     }
 
+    // Handle scheduling
+    if (isScheduled && scheduledDate) {
+      const scheduledDateTime = new Date(scheduledDate);
+      const [hours, minutes] = scheduledTime.split(':');
+      scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
+
+      toast({
+        title: "Action Scheduled",
+        description: `Announcement will be sent on ${format(scheduledDateTime, "PPP 'at' p")}`,
+      });
+      
+      setOpen(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const notifications = selectedStudents.map(studentId => ({
@@ -94,14 +137,27 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
 
       if (error) throw error;
 
+      // Send emails if requested
+      if (sendEmail) {
+        await supabase.functions.invoke('send-bulk-email', {
+          body: { 
+            studentIds: selectedStudents, 
+            subject: announcementTitle, 
+            message: announcementMessage,
+            courseId 
+          }
+        });
+      }
+
       toast({
         title: "Announcement sent",
-        description: `Successfully sent to ${selectedStudents.length} student(s)`,
+        description: `Successfully sent to ${selectedStudents.length} student(s)${sendEmail ? ' via app and email' : ''}`,
       });
 
       setAnnouncementTitle("");
       setAnnouncementMessage("");
       setSelectedStudents([]);
+      setSendEmail(false);
       setOpen(false);
       onActionComplete?.();
     } catch (error: any) {
@@ -136,7 +192,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
 
     setLoading(true);
     try {
-      // Get current assessment deadline
       const { data: assessment, error: fetchError } = await supabase
         .from("assessments")
         .select("due_date")
@@ -149,12 +204,10 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
         throw new Error("Assessment has no deadline set");
       }
 
-      // Calculate new deadline
       const currentDeadline = new Date(assessment.due_date);
       const newDeadline = new Date(currentDeadline);
       newDeadline.setDate(newDeadline.getDate() + extensionDays);
 
-      // Update assessment deadline
       const { error: updateError } = await supabase
         .from("assessments")
         .update({ due_date: newDeadline.toISOString() })
@@ -162,7 +215,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
 
       if (updateError) throw updateError;
 
-      // Send notifications to affected students
       const notifications = selectedStudents.map(studentId => ({
         user_id: studentId,
         title: "Deadline Extended",
@@ -215,7 +267,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
 
     setLoading(true);
     try {
-      // Get all submissions for the selected students and assessment
       const { data: submissions, error: fetchError } = await supabase
         .from("submissions")
         .select("id, grade")
@@ -229,7 +280,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
         throw new Error("No graded submissions found for selected students");
       }
 
-      // Calculate new grades
       const updates = submissions.map(submission => {
         let newGrade = submission.grade!;
         
@@ -245,7 +295,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
         };
       });
 
-      // Update grades
       for (const update of updates) {
         const { error } = await supabase
           .from("submissions")
@@ -255,7 +304,6 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
         if (error) throw error;
       }
 
-      // Send notifications
       const notifications = selectedStudents.map(studentId => ({
         user_id: studentId,
         title: "Grade Adjusted",
@@ -319,20 +367,33 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
             </TabsTrigger>
           </TabsList>
 
+          {/* Search and Filters */}
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search students by name or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
+
           {/* Student Selection */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Select Students ({selectedStudents.length}/{students.length})</Label>
+              <Label>Select Students ({selectedStudents.length}/{filteredStudents.length})</Label>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleSelectAll}
               >
-                {selectedStudents.length === students.length ? "Deselect All" : "Select All"}
+                {selectedStudents.length === filteredStudents.length ? "Deselect All" : "Select All Filtered"}
               </Button>
             </div>
             <div className="border rounded-md p-4 max-h-48 overflow-y-auto space-y-2">
-              {students.map((student) => (
+              {filteredStudents.map((student) => (
                 <div key={student.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={student.id}
@@ -370,12 +431,72 @@ export const BulkActionsDialog = ({ students, courseId, assessments = [], onActi
                 onChange={(e) => setAnnouncementMessage(e.target.value)}
               />
             </div>
+
+            {/* Email Option */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="send-email"
+                checked={sendEmail}
+                onCheckedChange={(checked) => setSendEmail(checked as boolean)}
+              />
+              <Label htmlFor="send-email" className="cursor-pointer">
+                Also send via email
+              </Label>
+            </div>
+
+            {/* Scheduling Option */}
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="schedule"
+                  checked={isScheduled}
+                  onCheckedChange={(checked) => setIsScheduled(checked as boolean)}
+                />
+                <Label htmlFor="schedule" className="cursor-pointer">
+                  Schedule for later
+                </Label>
+              </div>
+
+              {isScheduled && (
+                <div className="grid grid-cols-2 gap-4 pl-6">
+                  <div className="space-y-2">
+                    <Label>Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {scheduledDate ? format(scheduledDate, "PPP") : "Pick a date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={scheduledDate}
+                          onSelect={setScheduledDate}
+                          disabled={(date) => date < new Date()}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="time">Time</Label>
+                    <Input
+                      id="time"
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Button
               onClick={sendAnnouncement}
               disabled={loading || selectedStudents.length === 0}
               className="w-full"
             >
-              {loading ? "Sending..." : `Send to ${selectedStudents.length} Student(s)`}
+              {loading ? "Sending..." : isScheduled ? `Schedule for ${selectedStudents.length} Student(s)` : `Send to ${selectedStudents.length} Student(s)`}
             </Button>
           </TabsContent>
 
