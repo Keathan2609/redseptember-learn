@@ -8,13 +8,14 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
-import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock, Download, FileText, FileSpreadsheet, Search, Filter, RefreshCw, ArrowUpDown, Users, TrendingDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -80,6 +81,11 @@ const StudentProgress = () => {
   const [selectedStudent, setSelectedStudent] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [classAverages, setClassAverages] = useState<ClassAverages | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [performanceFilter, setPerformanceFilter] = useState<"all" | "excellent" | "average" | "needs-attention">("all");
+  const [sortBy, setSortBy] = useState<"name" | "grade" | "completion" | "posts">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
@@ -1074,12 +1080,158 @@ const StudentProgress = () => {
     );
   }
 
+  // Helper functions for filtering and sorting
+  const getPerformanceLevel = (student: Student) => {
+    if (!classAverages) return "average";
+    const isExcellent = student.averageGrade >= classAverages.averageGrade && 
+                        student.completionRate >= classAverages.averageCompletion;
+    const needsAttention = student.averageGrade < classAverages.averageGrade - 10 || 
+                           student.completionRate < classAverages.averageCompletion - 20;
+    
+    if (isExcellent) return "excellent";
+    if (needsAttention) return "needs-attention";
+    return "average";
+  };
+
+  const filteredAndSortedStudents = students
+    .filter((student) => {
+      // Search filter
+      const matchesSearch = searchQuery === "" || 
+        student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Performance filter
+      const performanceLevel = getPerformanceLevel(student);
+      const matchesPerformance = performanceFilter === "all" || performanceLevel === performanceFilter;
+      
+      return matchesSearch && matchesPerformance;
+    })
+    .sort((a, b) => {
+      let compareValue = 0;
+      switch (sortBy) {
+        case "name":
+          compareValue = a.full_name.localeCompare(b.full_name);
+          break;
+        case "grade":
+          compareValue = a.averageGrade - b.averageGrade;
+          break;
+        case "completion":
+          compareValue = a.completionRate - b.completionRate;
+          break;
+        case "posts":
+          compareValue = a.forumPosts - b.forumPosts;
+          break;
+      }
+      return sortOrder === "asc" ? compareValue : -compareValue;
+    });
+
+  const toggleSort = (column: typeof sortBy) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  };
+
+  const toggleStudentSelection = (studentId: string) => {
+    const newSelection = new Set(selectedStudents);
+    if (newSelection.has(studentId)) {
+      newSelection.delete(studentId);
+    } else {
+      newSelection.add(studentId);
+    }
+    setSelectedStudents(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedStudents.size === filteredAndSortedStudents.length) {
+      setSelectedStudents(new Set());
+    } else {
+      setSelectedStudents(new Set(filteredAndSortedStudents.map(s => s.id)));
+    }
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    await fetchStudents();
+    toast({
+      title: "Data Refreshed",
+      description: "Student progress data has been updated.",
+    });
+  };
+
+  const getPerformanceBadge = (student: Student) => {
+    const level = getPerformanceLevel(student);
+    switch (level) {
+      case "excellent":
+        return <Badge className="bg-primary">Excellent</Badge>;
+      case "needs-attention":
+        return <Badge variant="destructive">Needs Attention</Badge>;
+      default:
+        return <Badge variant="secondary">Average</Badge>;
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Student Progress Tracking</h1>
-          <p className="text-muted-foreground">View detailed performance for individual students</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Student Progress Tracking</h1>
+              <p className="text-muted-foreground">View detailed performance for individual students</p>
+            </div>
+            <Button onClick={refreshData} variant="outline" disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {/* Class Overview Stats */}
+          {classAverages && students.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-4 mb-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{students.length}</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Class Avg Grade</CardTitle>
+                  <Award className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{classAverages.averageGrade}</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg Completion</CardTitle>
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{classAverages.averageCompletion}%</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg Forum Posts</CardTitle>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{classAverages.averageForumPosts}</div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
 
         {students.length === 0 ? (
@@ -1091,24 +1243,127 @@ const StudentProgress = () => {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>All Students</CardTitle>
-              <CardDescription>Click on a student to view detailed progress</CardDescription>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <CardTitle>All Students</CardTitle>
+                  <CardDescription>
+                    {filteredAndSortedStudents.length} of {students.length} students
+                    {selectedStudents.size > 0 && ` • ${selectedStudents.size} selected`}
+                  </CardDescription>
+                </div>
+              </div>
+
+              {/* Search and Filters */}
+              <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search students by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <Button
+                    variant={performanceFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceFilter("all")}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={performanceFilter === "excellent" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceFilter("excellent")}
+                  >
+                    <TrendingUp className="mr-1 h-3 w-3" />
+                    Excellent
+                  </Button>
+                  <Button
+                    variant={performanceFilter === "average" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceFilter("average")}
+                  >
+                    Average
+                  </Button>
+                  <Button
+                    variant={performanceFilter === "needs-attention" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceFilter("needs-attention")}
+                  >
+                    <TrendingDown className="mr-1 h-3 w-3" />
+                    Needs Attention
+                  </Button>
+                </div>
+              </div>
+
+              {/* Bulk Actions */}
+              {selectedStudents.size > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg mt-4">
+                  <span className="text-sm font-medium">{selectedStudents.size} students selected</span>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedStudents(new Set())}>
+                    Clear Selection
+                  </Button>
+                  <Button size="sm">
+                    Send Message
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Export Selected
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Student</TableHead>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedStudents.size === filteredAndSortedStudents.length && filteredAndSortedStudents.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("name")} className="h-8 px-2">
+                        Student
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                      </Button>
+                    </TableHead>
                     <TableHead>Enrollments</TableHead>
-                    <TableHead>Avg Grade</TableHead>
-                    <TableHead>Completion</TableHead>
-                    <TableHead>Forum Posts</TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("grade")} className="h-8 px-2">
+                        Avg Grade
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("completion")} className="h-8 px-2">
+                        Completion
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("posts")} className="h-8 px-2">
+                        Forum Posts
+                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>Performance</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {students.map((student) => (
-                    <TableRow key={student.id}>
+                  {filteredAndSortedStudents.map((student) => (
+                    <TableRow key={student.id} className={selectedStudents.has(student.id) ? "bg-muted/50" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedStudents.has(student.id)}
+                          onCheckedChange={() => toggleStudentSelection(student.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar>
@@ -1130,7 +1385,11 @@ const StudentProgress = () => {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Award className="h-4 w-4 text-muted-foreground" />
-                          {student.averageGrade > 0 ? student.averageGrade : "-"}
+                          {student.averageGrade > 0 ? (
+                            <span className="font-bold">{student.averageGrade}</span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1144,6 +1403,9 @@ const StudentProgress = () => {
                           <MessageSquare className="h-4 w-4 text-muted-foreground" />
                           {student.forumPosts}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {getPerformanceBadge(student)}
                       </TableCell>
                       <TableCell>
                         <Button
