@@ -120,7 +120,19 @@ const Courses = () => {
   const renderCourseCard = (course: any, showEnrollButton = false) => (
     <Card key={course.id} className="border-border bg-card hover:shadow-glow transition-smooth">
       <CardHeader>
-        <div className="aspect-video bg-gradient-primary rounded-lg mb-4" />
+        {course.thumbnail_url ? (
+          <div className="aspect-video rounded-lg mb-4 overflow-hidden">
+            <img 
+              src={course.thumbnail_url} 
+              alt={course.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="aspect-video bg-gradient-primary rounded-lg mb-4 flex items-center justify-center">
+            <BookOpen className="h-16 w-16 text-primary-foreground/50" />
+          </div>
+        )}
         <CardTitle>{course.title}</CardTitle>
         <CardDescription className="line-clamp-2">
           {course.description || "No description available"}
