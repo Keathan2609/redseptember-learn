@@ -8,8 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
-import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock, Download, FileText, FileSpreadsheet, Search, Filter, RefreshCw, ArrowUpDown, Users, TrendingDown } from "lucide-react";
+import { ArrowLeft, Award, BookOpen, MessageSquare, TrendingUp, Calendar, CheckCircle, Clock, Download, FileText, FileSpreadsheet, Search, Filter, RefreshCw, ArrowUpDown, Users, TrendingDown, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -86,6 +87,11 @@ const StudentProgress = () => {
   const [sortBy, setSortBy] = useState<"name" | "grade" | "completion" | "posts">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [messageSubject, setMessageSubject] = useState("");
+  const [messageContent, setMessageContent] = useState("");
+  const [sendEmail, setSendEmail] = useState(true);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
@@ -1161,6 +1167,89 @@ const StudentProgress = () => {
     });
   };
 
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageContent.trim()) {
+      toast({ title: "Error", description: "Please provide both subject and message.", variant: "destructive" });
+      return;
+    }
+
+    if (selectedStudents.size === 0) {
+      toast({ title: "Error", description: "Please select at least one student.", variant: "destructive" });
+      return;
+    }
+
+    setIsSendingMessage(true);
+
+    try {
+      const selectedStudentIds = Array.from(selectedStudents);
+
+      // Create notifications for selected students
+      const notifications = selectedStudentIds.map(studentId => ({
+        user_id: studentId,
+        title: messageSubject,
+        message: messageContent,
+        type: 'announcement' as const,
+        read: false
+      }));
+
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert(notifications);
+
+      if (notificationError) throw notificationError;
+
+      // Send emails if requested
+      if (sendEmail) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: courses } = await supabase
+          .from("courses")
+          .select("id")
+          .eq("facilitator_id", user?.id || "")
+          .limit(1);
+
+        const { error: emailError } = await supabase.functions.invoke('send-bulk-email', {
+          body: {
+            studentIds: selectedStudentIds,
+            subject: messageSubject,
+            message: messageContent,
+            courseId: courses?.[0]?.id || null
+          }
+        });
+
+        if (emailError) {
+          console.error('Email error:', emailError);
+          toast({ 
+            title: "Partial Success", 
+            description: "Notifications sent, but some emails may have failed.",
+            variant: "default"
+          });
+        } else {
+          toast({ 
+            title: "Success", 
+            description: `Message sent to ${selectedStudents.size} student(s) via notification and email.`
+          });
+        }
+      } else {
+        toast({ 
+          title: "Success", 
+          description: `Message sent to ${selectedStudents.size} student(s).`
+        });
+      }
+
+      // Reset state
+      setMessageDialogOpen(false);
+      setMessageSubject("");
+      setMessageContent("");
+      setSelectedStudents(new Set());
+      setSendEmail(true);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({ title: "Error", description: "Failed to send message. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
   const getPerformanceBadge = (student: Student) => {
     const level = getPerformanceLevel(student);
     switch (level) {
@@ -1307,7 +1396,8 @@ const StudentProgress = () => {
                   <Button size="sm" variant="outline" onClick={() => setSelectedStudents(new Set())}>
                     Clear Selection
                   </Button>
-                  <Button size="sm">
+                  <Button size="sm" onClick={() => setMessageDialogOpen(true)}>
+                    <Send className="mr-2 h-3 w-3" />
                     Send Message
                   </Button>
                   <Button size="sm" variant="outline">
@@ -1315,6 +1405,64 @@ const StudentProgress = () => {
                   </Button>
                 </div>
               )}
+
+              {/* Quick Message Dialog */}
+              <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+                <DialogContent className="sm:max-w-[525px]">
+                  <DialogHeader>
+                    <DialogTitle>Send Message to Students</DialogTitle>
+                    <DialogDescription>
+                      Send a direct message to {selectedStudents.size} selected student(s).
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="subject">Subject</Label>
+                      <Input
+                        id="subject"
+                        placeholder="Enter message subject"
+                        value={messageSubject}
+                        onChange={(e) => setMessageSubject(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="message">Message</Label>
+                      <Textarea
+                        id="message"
+                        placeholder="Enter your message here..."
+                        value={messageContent}
+                        onChange={(e) => setMessageContent(e.target.value)}
+                        className="min-h-[150px]"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="sendEmail"
+                        checked={sendEmail}
+                        onCheckedChange={(checked) => setSendEmail(checked as boolean)}
+                      />
+                      <Label htmlFor="sendEmail" className="text-sm font-normal cursor-pointer">
+                        Also send via email
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setMessageDialogOpen(false)}
+                      disabled={isSendingMessage}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={isSendingMessage || !messageSubject.trim() || !messageContent.trim()}
+                    >
+                      {isSendingMessage ? "Sending..." : "Send Message"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               <Table>
