@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { Breadcrumbs } from "./Breadcrumbs";
+import { QuickActionsMenu } from "./QuickActionsMenu";
+import { KeyboardShortcutsHint } from "./KeyboardShortcutsHint";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +41,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Enable keyboard shortcuts
+  useKeyboardShortcuts();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -145,9 +152,23 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        
+        <div className="flex-1 flex flex-col">
+          {/* Breadcrumb Header */}
+          <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+            <div className="flex h-14 items-center px-6">
+              <Breadcrumbs />
+            </div>
+          </header>
+          
+          {/* Main Content */}
+          <main className="flex-1 overflow-auto">
+            {children}
+          </main>
+        </div>
+
+        <QuickActionsMenu />
+        <KeyboardShortcutsHint />
       </div>
     </SidebarProvider>
   );
