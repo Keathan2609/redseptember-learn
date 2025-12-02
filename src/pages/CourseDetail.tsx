@@ -16,6 +16,8 @@ import AssessmentTaking from "@/components/courses/AssessmentTaking";
 import { BulkActionsDialog } from "@/components/courses/BulkActionsDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { useModuleCompletion } from "@/hooks/use-module-completion";
 import {
   DndContext,
   closestCenter,
@@ -49,6 +51,23 @@ function SortableModule({
   const style = { transform: CSS.Transform.toString(transform), transition };
   const moduleAssessments = assessments.filter((a: any) => a.module_id === module.id);
   const moduleResources = resources.filter((r: any) => r.module_id === module.id);
+  const { completion, loading } = useModuleCompletion(
+    module.id, 
+    profile?.role === "student" && isEnrolled ? profile.id : null
+  );
+
+  const handleResourceView = async (resourceId: string) => {
+    if (profile?.role === "student" && isEnrolled) {
+      try {
+        await supabase.from('resource_views').upsert({
+          resource_id: resourceId,
+          student_id: profile.id
+        }, { onConflict: 'resource_id,student_id' });
+      } catch (error) {
+        console.error('Error tracking resource view:', error);
+      }
+    }
+  };
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -61,9 +80,18 @@ function SortableModule({
                   <GripVertical className="h-5 w-5 text-muted-foreground" />
                 </div>
               )}
-              <div>
+              <div className="flex-1">
                 <CardTitle>{module.title}</CardTitle>
                 <CardDescription>{module.description}</CardDescription>
+                {profile?.role === "student" && isEnrolled && !loading && (
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-medium">{completion}%</span>
+                    </div>
+                    <Progress value={completion} className="h-2" />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -174,7 +202,10 @@ function SortableModule({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(resource.file_url, '_blank')}
+                          onClick={() => {
+                            handleResourceView(resource.id);
+                            window.open(resource.file_url, '_blank');
+                          }}
                         >
                           <FileText className="h-4 w-4 mr-2" />
                           View Resource
@@ -347,6 +378,19 @@ export default function CourseDetail() {
       .eq("course_id", id)
       .order("created_at", { ascending: false });
     setResources(resourceData || []);
+  };
+
+  const handleResourceView = async (resourceId: string) => {
+    if (profile?.role === "student" && isEnrolled) {
+      try {
+        await supabase.from('resource_views').upsert({
+          resource_id: resourceId,
+          student_id: profile.id
+        }, { onConflict: 'resource_id,student_id' });
+      } catch (error) {
+        console.error('Error tracking resource view:', error);
+      }
+    }
   };
 
   if (loading) {
@@ -540,7 +584,10 @@ export default function CourseDetail() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(resource.file_url, "_blank")}
+                      onClick={() => {
+                        handleResourceView(resource.id);
+                        window.open(resource.file_url, "_blank");
+                      }}
                     >
                       <FileText className="mr-2 h-4 w-4" />
                       View/Download
