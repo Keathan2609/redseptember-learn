@@ -373,6 +373,7 @@ export type Database = {
           file_type: string | null
           file_url: string
           id: string
+          module_id: string | null
           title: string
           uploaded_by: string | null
         }
@@ -383,6 +384,7 @@ export type Database = {
           file_type?: string | null
           file_url: string
           id?: string
+          module_id?: string | null
           title: string
           uploaded_by?: string | null
         }
@@ -393,6 +395,7 @@ export type Database = {
           file_type?: string | null
           file_url?: string
           id?: string
+          module_id?: string | null
           title?: string
           uploaded_by?: string | null
         }
@@ -402,6 +405,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
             referencedColumns: ["id"]
           },
           {

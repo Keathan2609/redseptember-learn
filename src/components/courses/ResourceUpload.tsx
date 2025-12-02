@@ -10,10 +10,11 @@ import { Upload } from "lucide-react";
 
 interface ResourceUploadProps {
   courseId: string;
+  moduleId?: string;
   onResourceAdded: () => void;
 }
 
-export default function ResourceUpload({ courseId, onResourceAdded }: ResourceUploadProps) {
+export default function ResourceUpload({ courseId, moduleId, onResourceAdded }: ResourceUploadProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -52,6 +53,7 @@ export default function ResourceUpload({ courseId, onResourceAdded }: ResourceUp
 
       const { error: dbError } = await supabase.from("resources").insert({
         course_id: courseId,
+        module_id: moduleId || null,
         title,
         description,
         file_url: publicUrl,
@@ -92,7 +94,7 @@ export default function ResourceUpload({ courseId, onResourceAdded }: ResourceUp
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload Course Resource</DialogTitle>
+          <DialogTitle>Upload {moduleId ? 'Module' : 'Course'} Resource</DialogTitle>
           <DialogDescription>
             Add learning materials like PDFs, videos, or documents
           </DialogDescription>

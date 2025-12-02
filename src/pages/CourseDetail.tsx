@@ -36,16 +36,19 @@ import { CSS } from "@dnd-kit/utilities";
 function SortableModule({ 
   module, 
   assessments, 
+  resources,
   profile, 
   isEnrolled, 
   courseId,
   isFacilitator,
   onAssessmentCreated,
-  onTakeAssessment 
+  onTakeAssessment,
+  onResourceAdded
 }: any) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: module.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const moduleAssessments = assessments.filter((a: any) => a.module_id === module.id);
+  const moduleResources = resources.filter((r: any) => r.module_id === module.id);
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -63,65 +66,126 @@ function SortableModule({
                 <CardDescription>{module.description}</CardDescription>
               </div>
             </div>
-            {isFacilitator && (
-              <AssessmentDialog moduleId={module.id} onAssessmentCreated={onAssessmentCreated} />
-            )}
           </div>
         </CardHeader>
         <CardContent>
-          {moduleAssessments.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No assessments in this module yet
-            </p>
-          ) : (
-            <div className="space-y-4">
-              <h4 className="font-semibold text-sm">Assessments</h4>
-              <Accordion type="single" collapsible className="w-full">
-                {moduleAssessments.map((assessment: any) => (
-                  <AccordionItem key={assessment.id} value={assessment.id}>
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <span className="font-medium">{assessment.title}</span>
-                        <Badge variant="outline" className="capitalize">
-                          {assessment.assessment_type}
-                        </Badge>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-4 pt-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">{assessment.description}</p>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            {assessment.due_date && (
-                              <div>Due: {new Date(assessment.due_date).toLocaleDateString()}</div>
-                            )}
-                            <div>Total Points: {assessment.total_points}</div>
-                          </div>
+          <Tabs defaultValue="assessments" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="assessments">
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Assessments
+              </TabsTrigger>
+              <TabsTrigger value="resources">
+                <FileText className="h-4 w-4 mr-2" />
+                Resources
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="assessments" className="space-y-4">
+              <div className="flex justify-end">
+                {isFacilitator && (
+                  <AssessmentDialog moduleId={module.id} onAssessmentCreated={onAssessmentCreated} />
+                )}
+              </div>
+              
+              {moduleAssessments.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No assessments in this module yet
+                </p>
+              ) : (
+                <Accordion type="single" collapsible className="w-full">
+                  {moduleAssessments.map((assessment: any) => (
+                    <AccordionItem key={assessment.id} value={assessment.id}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <span className="font-medium">{assessment.title}</span>
+                          <Badge variant="outline" className="capitalize">
+                            {assessment.assessment_type}
+                          </Badge>
                         </div>
-                        
-                        {profile?.role === "student" && isEnrolled && (
-                          <Button onClick={() => onTakeAssessment(assessment)} size="sm">
-                            Take Assessment
-                          </Button>
-                        )}
-                        
-                        {isFacilitator && (
-                          <div className="border-t pt-4 mt-4">
-                            <h5 className="font-semibold text-sm mb-3">Submissions</h5>
-                            <SubmissionReview 
-                              assessmentId={assessment.id}
-                              totalPoints={assessment.total_points}
-                              questions={assessment.questions as any}
-                            />
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-4 pt-2">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-2">{assessment.description}</p>
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              {assessment.due_date && (
+                                <div>Due: {new Date(assessment.due_date).toLocaleDateString()}</div>
+                              )}
+                              <div>Total Points: {assessment.total_points}</div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
-          )}
+                          
+                          {profile?.role === "student" && isEnrolled && (
+                            <Button onClick={() => onTakeAssessment(assessment)} size="sm">
+                              Take Assessment
+                            </Button>
+                          )}
+                          
+                          {isFacilitator && (
+                            <div className="border-t pt-4 mt-4">
+                              <h5 className="font-semibold text-sm mb-3">Submissions</h5>
+                              <SubmissionReview 
+                                assessmentId={assessment.id}
+                                totalPoints={assessment.total_points}
+                                questions={assessment.questions as any}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </TabsContent>
+
+            <TabsContent value="resources" className="space-y-4">
+              <div className="flex justify-end">
+                {isFacilitator && (
+                  <ResourceUpload courseId={courseId} moduleId={module.id} onResourceAdded={onResourceAdded} />
+                )}
+              </div>
+              
+              {moduleResources.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No resources in this module yet
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {moduleResources.map((resource: any) => (
+                    <Card key={resource.id} className="border-border">
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <CardTitle className="text-base">{resource.title}</CardTitle>
+                            {resource.description && (
+                              <CardDescription className="text-sm">{resource.description}</CardDescription>
+                            )}
+                          </div>
+                          {resource.file_type && (
+                            <Badge variant="secondary" className="ml-2">
+                              {resource.file_type}
+                            </Badge>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pb-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(resource.file_url, '_blank')}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Resource
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
@@ -388,12 +452,14 @@ export default function CourseDetail() {
                             key={module.id} 
                             module={module}
                             assessments={assessments}
+                            resources={resources}
                             profile={profile}
                             isEnrolled={isEnrolled}
                             courseId={id}
                             isFacilitator={profile?.role === "facilitator" && course.facilitator_id === profile.id}
                             onAssessmentCreated={refetchData}
                             onTakeAssessment={setTakingAssessment}
+                            onResourceAdded={refetchData}
                           />
                         ))}
                       </div>
@@ -448,14 +514,14 @@ export default function CourseDetail() {
                 <ResourceUpload courseId={id!} onResourceAdded={refetchData} />
               </div>
             )}
-            {resources.length === 0 ? (
+            {resources.filter((r: any) => !r.module_id).length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No course materials yet. {profile?.role === "facilitator" ? "Upload resources for your students." : "Resources will appear here once added."}
+                  No course-wide resources yet. {profile?.role === "facilitator" ? "Upload resources here for general course materials, or add them to specific modules." : "Course-wide resources will appear here."}
                 </CardContent>
               </Card>
             ) : (
-              resources.map((resource) => (
+              resources.filter((r: any) => !r.module_id).map((resource) => (
                 <Card key={resource.id} className="border-border bg-card">
                   <CardHeader>
                     <div className="flex justify-between items-start">
