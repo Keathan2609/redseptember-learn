@@ -27,11 +27,13 @@ interface AssessmentTakingProps {
     questions: Question[];
     total_points: number;
     due_date: string;
+    module_id?: string;
   };
+  courseId?: string;
   onSubmit: () => void;
 }
 
-export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTakingProps) {
+export default function AssessmentTaking({ assessment, courseId, onSubmit }: AssessmentTakingProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -150,6 +152,22 @@ export default function AssessmentTaking({ assessment, onSubmit }: AssessmentTak
       });
 
       if (error) throw error;
+
+      // Check for completion milestones
+      if (assessment.module_id && courseId) {
+        try {
+          await supabase.functions.invoke('check-completion-milestones', {
+            body: {
+              student_id: user.id,
+              module_id: assessment.module_id,
+              course_id: courseId
+            }
+          });
+        } catch (milestoneError) {
+          console.error('Error checking milestones:', milestoneError);
+          // Don't fail the submission if milestone check fails
+        }
+      }
 
       toast({
         title: "Assessment Submitted",
