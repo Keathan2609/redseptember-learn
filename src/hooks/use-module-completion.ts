@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export function useModuleCompletion(moduleId: string, studentId: string | null) {
+export function useModuleCompletion(
+  moduleId: string, 
+  studentId: string | null, 
+  courseId?: string
+) {
   const [completion, setCompletion] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
@@ -60,5 +64,21 @@ export function useModuleCompletion(moduleId: string, studentId: string | null) 
     };
   }, [moduleId, studentId]);
 
-  return { completion, loading };
+  const checkMilestones = async () => {
+    if (!studentId || !courseId) return;
+    
+    try {
+      await supabase.functions.invoke('check-completion-milestones', {
+        body: {
+          student_id: studentId,
+          module_id: moduleId,
+          course_id: courseId
+        }
+      });
+    } catch (error) {
+      console.error('Error checking completion milestones:', error);
+    }
+  };
+
+  return { completion, loading, checkMilestones };
 }

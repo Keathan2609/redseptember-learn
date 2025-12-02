@@ -51,9 +51,10 @@ function SortableModule({
   const style = { transform: CSS.Transform.toString(transform), transition };
   const moduleAssessments = assessments.filter((a: any) => a.module_id === module.id);
   const moduleResources = resources.filter((r: any) => r.module_id === module.id);
-  const { completion, loading } = useModuleCompletion(
+  const { completion, loading, checkMilestones } = useModuleCompletion(
     module.id, 
-    profile?.role === "student" && isEnrolled ? profile.id : null
+    profile?.role === "student" && isEnrolled ? profile.id : null,
+    courseId
   );
 
   const handleResourceView = async (resourceId: string) => {
@@ -63,6 +64,9 @@ function SortableModule({
           resource_id: resourceId,
           student_id: profile.id
         }, { onConflict: 'resource_id,student_id' });
+        
+        // Check for completion milestones
+        await checkMilestones();
       } catch (error) {
         console.error('Error tracking resource view:', error);
       }
@@ -463,6 +467,7 @@ export default function CourseDetail() {
                 </Button>
                 <AssessmentTaking
                   assessment={takingAssessment}
+                  courseId={id}
                   onSubmit={() => {
                     setTakingAssessment(null);
                     refetchData();
