@@ -13,6 +13,7 @@ import CalendarPage from "./pages/CalendarPage";
 import Forum from "./pages/Forum";
 import Analytics from "./pages/Analytics";
 import StudentProgress from "./pages/StudentProgress";
+import Gradebook from "./pages/Gradebook";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
         <Route path="/forum" element={<Forum />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/student-progress" element={<StudentProgress />} />
+        <Route path="/gradebook" element={<Gradebook />} />
         <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
