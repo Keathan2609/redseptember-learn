@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { GraduationCap } from "lucide-react";
+import { ParticleBackground } from "@/components/ui/ParticleBackground";
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -66,8 +67,9 @@ const Auth = () => {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center bg-gradient-accent p-4">
-      <Card className="w-full max-w-md border-border/50 bg-card/95 backdrop-blur-sm">
+  return <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+      <ParticleBackground />
+      <Card className="w-full max-w-md border-border/50 bg-card/95 backdrop-blur-sm relative z-10">
         <CardHeader className="text-center space-y-4">
           
           <div>
