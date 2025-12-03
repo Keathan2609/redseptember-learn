@@ -7,6 +7,7 @@ import { Breadcrumbs } from "./Breadcrumbs";
 import { QuickActionsMenu } from "./QuickActionsMenu";
 import { KeyboardShortcutsHint } from "./KeyboardShortcutsHint";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { ParticleBackground } from "@/components/ui/ParticleBackground";
 import {
   Sidebar,
   SidebarContent,
@@ -106,7 +107,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <ParticleBackground />
+      <div className="min-h-screen flex w-full bg-background relative z-10">
         <Sidebar className="border-r border-sidebar-border">
           <SidebarHeader className="p-6">
             <div className="flex items-center justify-between gap-3">
