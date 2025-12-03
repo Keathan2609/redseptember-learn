@@ -1,4 +1,4 @@
-import { Home, BookOpen, Calendar, MessageSquare, FileText, BarChart3, Users, Settings } from "lucide-react";
+import { Home, BookOpen, Calendar, MessageSquare, FileText, BarChart3, Users, Settings, GraduationCap, Video } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -39,6 +39,7 @@ export function AppSidebar() {
   const studentItems = [
     { title: "Dashboard", url: "/dashboard", icon: Home },
     { title: "Courses", url: "/courses", icon: BookOpen },
+    { title: "Gradebook", url: "/gradebook", icon: GraduationCap },
     { title: "Calendar", url: "/calendar", icon: Calendar },
     { title: "Forum", url: "/forum", icon: MessageSquare },
     { title: "Resources", url: "/resources", icon: FileText },

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { BookOpen, Users, FileText, ClipboardCheck, GripVertical } from "lucide-react";
+import { BookOpen, Users, FileText, ClipboardCheck, GripVertical, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModuleDialog } from "@/components/courses/ModuleDialog";
 import { AssessmentDialog } from "@/components/courses/AssessmentDialog";
@@ -14,6 +14,8 @@ import { SubmissionReview } from "@/components/courses/SubmissionReview";
 import ResourceUpload from "@/components/courses/ResourceUpload";
 import AssessmentTaking from "@/components/courses/AssessmentTaking";
 import { BulkActionsDialog } from "@/components/courses/BulkActionsDialog";
+import { LiveSessionDialog } from "@/components/courses/LiveSessionDialog";
+import { LiveSessionsList } from "@/components/courses/LiveSessionsList";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -443,6 +445,10 @@ export default function CourseDetail() {
               <BookOpen className="h-4 w-4 mr-2" />
               Modules
             </TabsTrigger>
+            <TabsTrigger value="live-sessions">
+              <Video className="h-4 w-4 mr-2" />
+              Live Sessions
+            </TabsTrigger>
             {profile?.role === "facilitator" && (
               <TabsTrigger value="students">
                 <Users className="h-4 w-4 mr-2" />
@@ -517,6 +523,19 @@ export default function CourseDetail() {
                 )}
               </>
             )}
+          </TabsContent>
+
+          <TabsContent value="live-sessions" className="space-y-4">
+            {profile?.role === "facilitator" && course.facilitator_id === profile.id && (
+              <div className="flex justify-end">
+                <LiveSessionDialog courseId={id!} onSessionCreated={refetchData} />
+              </div>
+            )}
+            <LiveSessionsList 
+              courseId={id!} 
+              isEnrolled={isEnrolled}
+              isFacilitator={profile?.role === "facilitator" && course.facilitator_id === profile.id}
+            />
           </TabsContent>
 
           <TabsContent value="students" className="space-y-4">
