@@ -120,26 +120,33 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="p-8">
         <div className="mb-8">
+          <div className="flex items-center gap-2 text-accent text-sm font-mono mb-2">
+            <span className="inline-block w-2 h-2 bg-accent rounded-full animate-pulse" />
+            SYSTEM ACTIVE
+          </div>
           <h1 className="text-4xl font-bold mb-2">
-            Welcome back, {profile?.full_name || "User"}
+            Welcome back, <span className="text-primary">{profile?.full_name || "User"}</span>
           </h1>
-          <p className="text-muted-foreground capitalize">
-            {profile?.role} Dashboard
+          <p className="text-muted-foreground capitalize font-mono text-sm">
+            &gt; {profile?.role}_dashboard.init()
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-          {statCards.map((stat) => (
-            <Card key={stat.title} className="border-border bg-card hover:shadow-glow transition-smooth">
+          {statCards.map((stat, index) => (
+            <Card key={stat.title} className="relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-accent/10 to-transparent rounded-bl-full" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium font-sans">
                   {stat.title}
                 </CardTitle>
-                <stat.icon className="h-4 w-4 text-muted-foreground" />
+                <div className="p-2 rounded bg-accent/10 text-accent group-hover:bg-accent group-hover:text-accent-foreground transition-colors">
+                  <stat.icon className="h-4 w-4" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground">
+                <div className="text-3xl font-bold font-mono text-glow">{stat.value}</div>
+                <p className="text-xs text-muted-foreground mt-1">
                   {stat.description}
                 </p>
               </CardContent>
